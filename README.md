@@ -17,10 +17,31 @@ uv run dqm tables
 # Use a custom database
 uv run dqm --db /path/to/other.duckdb tables
 
+# Profile all columns in a table (nulls, cardinality, min/max, distribution)
+uv run dqm profile episodes
+uv run dqm --db /path/to/other.duckdb profile my_table
+
 # Generate a Markdown report for a table
 uv run dqm report episodes
 uv run dqm report episodes --output report.md
 ```
+
+## Column Profiler
+
+`dqm profile <table>` computes per-column statistics and renders them in a rich table:
+
+| Stat | Description |
+|------|-------------|
+| **Rows** | Total row count |
+| **Nulls** | Absolute null count |
+| **Null %** | Null percentage (highlighted red ≥ 20%, yellow ≥ 5%) |
+| **Unique** | Count of distinct non-null values |
+| **Min / Max** | Minimum and maximum value |
+| **Mean** | Average (numeric columns only) |
+| **P25 / P75** | 25th and 75th percentiles (numeric only) |
+| **Top values** | Top 5 most-frequent values with counts |
+
+Supported DuckDB types: `VARCHAR`, `INTEGER`, `BIGINT`, `FLOAT`, `DOUBLE`, `TIMESTAMP`, `JSON`, and more.
 
 ## Default data source
 
