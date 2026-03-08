@@ -78,5 +78,234 @@ def report(ctx: click.Context, table: str, output: str | None) -> None:
         click.echo(markdown, nl=False)
 
 
+@cli.command("profile")
+@click.argument("table")
+@click.pass_context
+def profile_cmd(ctx: click.Context, table: str) -> None:
+    """Profile every column in TABLE, pretty-print statistics, and save a snapshot."""
+    from rich.console import Console
+    from rich.table import Table as RichTable
+    from rich.text import Text
+    from .profiler import profile_table
+    from .snapshots import save_snapshot
+
+    db_path = ctx.obj["db"]
+    console = Console()
+
+    try:
+        prof = profile_table(db_path, table)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise SystemExit(1)
+    except Exception as e:
+        console.print(f"[red]Error profiling table '{table}':[/red] {e}")
+        raise SystemExit(1)
+
+    # ── Pretty-print ──────────────────────────────────────────────────
+    console.print(
+        f"\n[bold cyan]Column profile[/bold cyan] — "
+        f"[bold]{prof.table}[/bold]  "
+        f"[dim]{db_path}[/dim]  "
+        f"[dim]{prof.profiled_at.strftime('%Y-%m-%d %H:%M UTC')}[/dim]\n"
+    )
+
+    rt = RichTable(show_header=True, header_style="bold magenta", show_lines=True)
+    rt.add_column("Column", style="cyan", no_wrap=True)
+    rt.add_column("Type", style="green")
+    rt.add_column("Rows", justify="right")
+    rt.add_column("Nulls", justify="right")
+    rt.add_column("Null %", justify="right")
+    rt.add_column("Unique", justify="right")
+    rt.add_column("Min", overflow="fold")
+    rt.add_column("Max", overflow="fold")
+    rt.add_column("Mean", justify="right")
+    rt.add_column("P25", justify="right")
+    rt.add_column("P75", justify="right")
+    rt.add_column("Top values (value: count)", overflow="fold")
+
+    for col in prof.columns:
+        # Colour null% red when it's significant
+        null_pct_str = f"{col.null_pct:.1%}"
+        null_text = Text(null_pct_str)
+        if col.null_pct >= 0.20:
+            null_text.stylize("bold red")
+        elif col.null_pct >= 0.05:
+            null_text.stylize("yellow")
+
+        top_str = "  ".join(f"{v}: {c:,}" for v, c in col.top_values) if col.top_values else "—"
+
+        rt.add_row(
+            col.name,
+            col.dtype,
+            f"{col.row_count:,}",
+            f"{col.null_count:,}",
+            null_text,
+            f"{col.unique_count:,}",
+            _fmt(col.min_val),
+            _fmt(col.max_val),
+            _fmt_float(col.mean),
+            _fmt_float(col.p25),
+            _fmt_float(col.p75),
+            top_str,
+        )
+
+    console.print(rt)
+    if prof.columns:
+        console.print(
+            f"\n[dim]{len(prof.columns)} column(s) profiled — "
+            f"{prof.columns[0].row_count:,} rows[/dim]\n"
+        )
+
+    # ── Auto-save snapshot ────────────────────────────────────────────
+    try:
+        snap_id = save_snapshot(prof)
+        console.print(
+            f"[green]✓[/green] Snapshot saved "
+            f"[dim](id={snap_id})[/dim] — "
+            f"view history with [bold]dqm snapshots list {table}[/bold]\n"
+        )
+    except Exception as e:
+        console.print(f"[yellow]Warning:[/yellow] Could not save snapshot: {e}")
+
+
+# ---------------------------------------------------------------------------
+# snapshots command group
+# ---------------------------------------------------------------------------
+
+@cli.group("snapshots")
+def snapshots_group() -> None:
+    """Manage profile snapshots stored in ~/.dqm/snapshots.db."""
+
+
+@snapshots_group.command("list")
+@click.argument("table")
+def snapshots_list(table: str) -> None:
+    """Show snapshot history for TABLE (newest first)."""
+    from rich.console import Console
+    from rich.table import Table as RichTable
+    from .snapshots import list_snapshots
+
+    console = Console()
+    rows = list_snapshots(table)
+
+    if not rows:
+        console.print(
+            f"[yellow]No snapshots found for table '{table}'.[/yellow]\n"
+            f"Run [bold]dqm profile {table}[/bold] to create one."
+        )
+        return
+
+    rt = RichTable(
+        title=f"Snapshot history — {table}",
+        show_header=True,
+        header_style="bold magenta",
+    )
+    rt.add_column("ID", justify="right", style="cyan")
+    rt.add_column("Source DB", style="dim")
+    rt.add_column("Table", style="green")
+    rt.add_column("Profiled at", style="yellow")
+
+    for row in rows:
+        rt.add_row(
+            str(row["id"]),
+            row["source_db"],
+            row["table_name"],
+            row["profiled_at"],
+        )
+
+    console.print(rt)
+    console.print(
+        f"\n[dim]{len(rows)} snapshot(s) — "
+        f"use [bold]dqm snapshots get <id>[/bold] to inspect one[/dim]\n"
+    )
+
+
+@snapshots_group.command("get")
+@click.argument("snapshot_id", type=int)
+def snapshots_get(snapshot_id: int) -> None:
+    """Print the full profile stored in snapshot SNAPSHOT_ID."""
+    from rich.console import Console
+    from rich.table import Table as RichTable
+    from rich.text import Text
+    from .snapshots import get_snapshot
+
+    console = Console()
+    prof = get_snapshot(snapshot_id)
+
+    if prof is None:
+        console.print(f"[red]Error:[/red] No snapshot found with id={snapshot_id}.")
+        raise SystemExit(1)
+
+    console.print(
+        f"\n[bold cyan]Snapshot #{snapshot_id}[/bold cyan] — "
+        f"[bold]{prof.table}[/bold]  "
+        f"[dim]{prof.db_path}[/dim]  "
+        f"[dim]{prof.profiled_at.strftime('%Y-%m-%d %H:%M UTC')}[/dim]\n"
+    )
+
+    rt = RichTable(show_header=True, header_style="bold magenta", show_lines=True)
+    rt.add_column("Column", style="cyan", no_wrap=True)
+    rt.add_column("Type", style="green")
+    rt.add_column("Rows", justify="right")
+    rt.add_column("Nulls", justify="right")
+    rt.add_column("Null %", justify="right")
+    rt.add_column("Unique", justify="right")
+    rt.add_column("Min", overflow="fold")
+    rt.add_column("Max", overflow="fold")
+    rt.add_column("Mean", justify="right")
+    rt.add_column("P25", justify="right")
+    rt.add_column("P75", justify="right")
+    rt.add_column("Top values (value: count)", overflow="fold")
+
+    for col in prof.columns:
+        null_pct_str = f"{col.null_pct:.1%}"
+        null_text = Text(null_pct_str)
+        if col.null_pct >= 0.20:
+            null_text.stylize("bold red")
+        elif col.null_pct >= 0.05:
+            null_text.stylize("yellow")
+
+        top_str = "  ".join(f"{v}: {c:,}" for v, c in col.top_values) if col.top_values else "—"
+
+        rt.add_row(
+            col.name,
+            col.dtype,
+            f"{col.row_count:,}",
+            f"{col.null_count:,}",
+            null_text,
+            f"{col.unique_count:,}",
+            _fmt(col.min_val),
+            _fmt(col.max_val),
+            _fmt_float(col.mean),
+            _fmt_float(col.p25),
+            _fmt_float(col.p75),
+            top_str,
+        )
+
+    console.print(rt)
+    if prof.columns:
+        console.print(
+            f"\n[dim]{len(prof.columns)} column(s) — "
+            f"{prof.columns[0].row_count:,} rows[/dim]\n"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers (shared by profile_cmd and snapshots_get)
+# ---------------------------------------------------------------------------
+
+def _fmt(val: object) -> str:
+    if val is None:
+        return "[dim]—[/dim]"
+    s = str(val)
+    return s[:40] + "…" if len(s) > 40 else s
+
+
+def _fmt_float(val: float | None) -> str:
+    if val is None:
+        return "[dim]—[/dim]"
+    return f"{val:,.2f}"
+
+
 def main() -> None:
     cli()
