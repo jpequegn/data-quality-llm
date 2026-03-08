@@ -1,18 +1,34 @@
 """Shared data models used across dqm modules."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
 class ColumnProfile:
     name: str
     dtype: str
+    row_count: int
+    null_count: int
     null_pct: float
     unique_count: int
-    min_value: object = None
-    max_value: object = None
-    top_values: list[str] = field(default_factory=list)
+    min_val: Any
+    max_val: Any
+    mean: float | None        # numeric only
+    p25: float | None         # numeric only
+    p75: float | None         # numeric only
+    top_values: list[tuple]   # top 5 most frequent (value, count) pairs
+
+
+@dataclass
+class TableProfile:
+    table: str
+    db_path: str
+    profiled_at: datetime
+    columns: list[ColumnProfile] = field(default_factory=list)
 
 
 @dataclass

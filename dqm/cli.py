@@ -78,5 +78,95 @@ def report(ctx: click.Context, table: str, output: str | None) -> None:
         click.echo(markdown, nl=False)
 
 
+@cli.command("profile")
+@click.argument("table")
+@click.pass_context
+def profile_cmd(ctx: click.Context, table: str) -> None:
+    """Profile every column in TABLE and pretty-print statistics."""
+    from rich.console import Console
+    from rich.table import Table as RichTable
+    from rich.text import Text
+    from .profiler import profile_table
+
+    db_path = ctx.obj["db"]
+    console = Console()
+
+    try:
+        prof = profile_table(db_path, table)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise SystemExit(1)
+    except Exception as e:
+        console.print(f"[red]Error profiling table '{table}':[/red] {e}")
+        raise SystemExit(1)
+
+    # Header
+    console.print(
+        f"\n[bold cyan]Column profile[/bold cyan] — "
+        f"[bold]{prof.table}[/bold]  "
+        f"[dim]{db_path}[/dim]  "
+        f"[dim]{prof.profiled_at.strftime('%Y-%m-%d %H:%M UTC')}[/dim]\n"
+    )
+
+    rt = RichTable(show_header=True, header_style="bold magenta", show_lines=True)
+    rt.add_column("Column", style="cyan", no_wrap=True)
+    rt.add_column("Type", style="green")
+    rt.add_column("Rows", justify="right")
+    rt.add_column("Nulls", justify="right")
+    rt.add_column("Null %", justify="right")
+    rt.add_column("Unique", justify="right")
+    rt.add_column("Min", overflow="fold")
+    rt.add_column("Max", overflow="fold")
+    rt.add_column("Mean", justify="right")
+    rt.add_column("P25", justify="right")
+    rt.add_column("P75", justify="right")
+    rt.add_column("Top values (value: count)", overflow="fold")
+
+    for col in prof.columns:
+        # Colour null% red when it's significant
+        null_pct_str = f"{col.null_pct:.1%}"
+        null_text = Text(null_pct_str)
+        if col.null_pct >= 0.20:
+            null_text.stylize("bold red")
+        elif col.null_pct >= 0.05:
+            null_text.stylize("yellow")
+
+        top_str = "  ".join(f"{v}: {c:,}" for v, c in col.top_values) if col.top_values else "—"
+
+        rt.add_row(
+            col.name,
+            col.dtype,
+            f"{col.row_count:,}",
+            f"{col.null_count:,}",
+            null_text,
+            f"{col.unique_count:,}",
+            _fmt(col.min_val),
+            _fmt(col.max_val),
+            _fmt_float(col.mean),
+            _fmt_float(col.p25),
+            _fmt_float(col.p75),
+            top_str,
+        )
+
+    console.print(rt)
+    console.print(
+        f"\n[dim]{len(prof.columns)} column(s) profiled — "
+        f"{prof.columns[0].row_count:,} rows[/dim]\n" if prof.columns else ""
+    )
+
+
+def _fmt(val: object) -> str:
+    if val is None:
+        return "[dim]—[/dim]"
+    s = str(val)
+    return s[:40] + "…" if len(s) > 40 else s
+
+
+def _fmt_float(val: float | None) -> str:
+    if val is None:
+        return "[dim]—[/dim]"
+    return f"{val:,.2f}"
+
+
 def main() -> None:
     cli()
