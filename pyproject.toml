@@ -1,0 +1,22 @@
+[project]
+name = "data-quality-llm"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.84.0",
+    "click>=8.3.1",
+    "duckdb>=1.4.4",
+    "rich>=14.3.3",
+]
+
+[project.scripts]
+dqm = "dqm.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dqm"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
