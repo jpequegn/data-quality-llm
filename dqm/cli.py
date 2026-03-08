@@ -1,24 +1,47 @@
 """CLI entrypoint for dqm."""
 
 import click
-import sys
 from pathlib import Path
 
-DEFAULT_DB = Path.home() / ".p3" / "p3.duckdb"
+from .db import resolve_default_db
 
 
 @click.group()
 @click.option(
     "--db",
-    default=str(DEFAULT_DB),
-    show_default=True,
-    help="Path to DuckDB database file.",
+    default=None,
+    show_default=False,
+    help="Path to DuckDB database file. Defaults to ~/.p3/p3.duckdb.",
 )
 @click.pass_context
-def cli(ctx: click.Context, db: str) -> None:
+def cli(ctx: click.Context, db: str | None) -> None:
     """Data quality checks for DuckDB databases, powered by Claude."""
     ctx.ensure_object(dict)
-    ctx.obj["db"] = db
+    ctx.obj["db"] = db or resolve_default_db()
+
+
+@cli.command("tables")
+@click.pass_context
+def tables_cmd(ctx: click.Context) -> None:
+    """List all tables in the connected database."""
+    from rich.console import Console
+    from rich.table import Table
+    from .db import list_tables
+
+    db_path = ctx.obj["db"]
+    console = Console()
+
+    try:
+        names = list_tables(db_path)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise SystemExit(1)
+
+    table = Table(title=f"Tables in {db_path}", show_header=True)
+    table.add_column("Table", style="cyan")
+    for name in names:
+        table.add_row(name)
+    console.print(table)
 
 
 @cli.command()
@@ -28,10 +51,10 @@ def cli(ctx: click.Context, db: str) -> None:
 def report(ctx: click.Context, table: str, output: str | None) -> None:
     """Generate a Markdown data quality report for TABLE."""
     from datetime import datetime, timezone
-    from .models import Anomaly, ColumnDiff, TableDiff
+    from .models import ColumnDiff, TableDiff
     from .report import ReportGenerator
 
-    # Placeholder diff — real data comes from snapshot store (issue #6) and diff engine (issue #7)
+    # Placeholder diff — real data comes from snapshot store (#6) and diff engine (#7)
     now = datetime.now(tz=timezone.utc)
     diff = TableDiff(
         table=table,
