@@ -1,7 +1,7 @@
 """Snapshot store: persist TableProfile snapshots in a local SQLite database.
 
-The database lives at ``~/.dqm/snapshots.db`` and grows every time a profile
-is taken, enabling historical comparison via the diff engine.
+The database lives at ``~/.dqm/snapshots.db`` and grows every time
+``dqm profile <table>`` is run, enabling historical comparison via the diff engine.
 
 Schema
 ------
@@ -59,6 +59,7 @@ def _profile_to_json(profile: TableProfile) -> str:
     """Serialise a TableProfile to a JSON string."""
 
     def _default(obj: Any) -> Any:
+        # datetime → ISO string; anything else → str fallback
         if isinstance(obj, datetime):
             return obj.isoformat()
         return str(obj)
@@ -147,6 +148,13 @@ def list_snapshots(
 
     Each entry is a dict with keys: ``id``, ``source_db``, ``table_name``,
     ``profiled_at`` (ISO string).
+
+    Parameters
+    ----------
+    table_name:
+        The table whose history you want.
+    snapshots_db:
+        Path to the SQLite snapshot store.
     """
     conn = _open(snapshots_db)
     try:
@@ -166,6 +174,13 @@ def get_snapshot(snapshot_id: int, snapshots_db: Path = _DEFAULT_DB) -> TablePro
     """Fetch a single snapshot by *id* and deserialise it.
 
     Returns ``None`` if no snapshot with that id exists.
+
+    Parameters
+    ----------
+    snapshot_id:
+        Primary key of the snapshot row.
+    snapshots_db:
+        Path to the SQLite snapshot store.
     """
     conn = _open(snapshots_db)
     try:

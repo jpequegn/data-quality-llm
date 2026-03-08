@@ -41,7 +41,27 @@ class AnomalyContext:
 
 @dataclass
 class ColumnDiff:
-    """Per-column diff between two TableProfile snapshots."""
+    """Per-column diff between two TableProfile snapshots.
+
+    Attributes
+    ----------
+    column:
+        Column name.
+    dtype:
+        DuckDB data type.
+    null_pct_before / null_pct_after:
+        Null percentage in snapshot A and B.
+    unique_before / unique_after:
+        Distinct-value count in snapshot A and B.
+    min_before / min_after:
+        Minimum value in snapshot A and B (None when non-comparable).
+    max_before / max_after:
+        Maximum value in snapshot A and B.
+    top_values_before / top_values_after:
+        Top-5 (value, count) pairs for each snapshot.
+    severity:
+        ``"ok"`` | ``"warn"`` | ``"alert"`` — driven by null_pct change.
+    """
 
     column: str
     dtype: str
@@ -68,8 +88,12 @@ class ColumnDiff:
     top_values_before: list[tuple] = field(default_factory=list)
     top_values_after: list[tuple] = field(default_factory=list)
 
-    # Severity from diff engine
+    # Severity assessment
     severity: str = "ok"   # "ok" | "warn" | "alert"
+
+    # ------------------------------------------------------------------
+    # Convenience properties
+    # ------------------------------------------------------------------
 
     @property
     def null_pct_delta(self) -> float:
@@ -169,7 +193,19 @@ class Anomaly:
 
 @dataclass
 class TableDiff:
-    """Result of comparing two TableProfile snapshots for the same table."""
+    """Result of comparing two TableProfile snapshots for the same table.
+
+    Attributes
+    ----------
+    table:
+        Table name.
+    snapshot_before / snapshot_after:
+        Human-readable labels for the two snapshots (e.g. ``"id=3"``).
+    date_before / date_after:
+        ``profiled_at`` timestamps for snapshot A and B.
+    columns:
+        One :class:`ColumnDiff` per shared column.
+    """
 
     table: str
     snapshot_before: str
