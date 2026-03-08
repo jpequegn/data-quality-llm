@@ -12,6 +12,15 @@ class ColumnProfile:
     unique_count: int
     min_value: object = None
     max_value: object = None
+    top_values: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AnomalyContext:
+    """Extra context passed to the LLM explainer."""
+    table: str
+    top_values_before: list[str] = field(default_factory=list)
+    top_values_after: list[str] = field(default_factory=list)
 
 
 @dataclass
