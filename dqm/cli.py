@@ -495,6 +495,10 @@ def _fmt_drift(before, after) -> str:
     return f"{b} → {a}"
 
 
+# ---------------------------------------------------------------------------
+# Formatting helpers (shared by profile_cmd and snapshots_get)
+# ---------------------------------------------------------------------------
+
 def _fmt(val: object) -> str:
     if val is None:
         return "[dim]—[/dim]"
