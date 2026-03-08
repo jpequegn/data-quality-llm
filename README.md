@@ -21,6 +21,10 @@ uv run dqm --db /path/to/other.duckdb tables
 uv run dqm profile episodes
 uv run dqm --db /path/to/other.duckdb profile my_table
 
+# Run full anomaly check: profile → snapshot → diff → flag rule violations
+uv run dqm check episodes
+uv run dqm --db /path/to/other.duckdb check my_table
+
 # Generate a Markdown report for a table
 uv run dqm report episodes
 uv run dqm report episodes --output report.md
@@ -51,6 +55,42 @@ The tool defaults to the P³ (parakeet-podcast-processor) DuckDB, checking these
 2. `~/Code/parakeet-podcast-processor/data/p3.duckdb`
 
 Override with `--db <path>`.
+
+## Anomaly Detector
+
+`dqm check <table>` profiles the table, saves a snapshot, diffs it against the
+previous snapshot, and runs all threshold rules.  Each anomaly shows the
+triggering rule, the old and new values, and a severity badge.
+
+### Default rules
+
+| Rule | Condition | Severity |
+|------|-----------|----------|
+| `null_pct_increase` | null % rose by > 10 pp | **ALERT** |
+| `unique_count_drop` | unique count fell by > 20 % | **WARN** |
+| `row_count_decrease` | row count decreased at all | **ALERT** |
+| `row_count_spike` | row count increased by > 500 % | **WARN** |
+| `max_val_decrease` | max value fell for a monotonic column | **ALERT** |
+
+### Configuration
+
+Thresholds are read from `~/.dqm/anomaly_config.yaml` (user overrides) falling
+back to the bundled `dqm/anomaly_config.yaml`.  Example override:
+
+```yaml
+thresholds:
+  null_pct_increase_pp: 5.0        # fire at 5 pp instead of 10 pp
+  unique_count_drop_pct: 0.10      # fire at 10 % drop instead of 20 %
+  row_count_increase_pct: 2.00     # fire at 200 % increase instead of 500 %
+  monotonic_columns:               # check max_val for these columns
+    - episode_id
+    - published_at
+```
+
+Pass a custom config path with `--anomaly-config <path>`.
+
+Snapshots are stored in `~/.dqm/snapshots.db` (SQLite).  Override with
+`--snapshots-db <path>`.
 
 ## P³ columns worth monitoring
 
