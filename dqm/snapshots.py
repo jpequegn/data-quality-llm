@@ -1,7 +1,7 @@
 """Snapshot store: persist TableProfile snapshots in a local SQLite database.
 
-The database lives at ~/.dqm/snapshots.db and grows every time
-``dqm profile <table>`` is run, enabling historical comparison.
+The database lives at ``~/.dqm/snapshots.db`` and grows every time
+``dqm profile <table>`` is run, enabling historical comparison via the diff engine.
 
 Schema
 ------
@@ -191,5 +191,32 @@ def get_snapshot(snapshot_id: int, snapshots_db: Path = _DEFAULT_DB) -> TablePro
         if row is None:
             return None
         return _json_to_profile(row["profile_json"])
+    finally:
+        conn.close()
+
+
+def get_latest_two_snapshots(
+    table_name: str,
+    snapshots_db: Path = _DEFAULT_DB,
+) -> tuple[TableProfile, TableProfile] | None:
+    """Return (before, after) — the two most recent snapshots for *table_name*.
+
+    Returns ``None`` if fewer than two snapshots exist.
+    """
+    conn = _open(snapshots_db)
+    try:
+        rows = conn.execute(
+            "SELECT profile_json FROM snapshots "
+            "WHERE table_name = ? "
+            "ORDER BY profiled_at DESC "
+            "LIMIT 2",
+            (table_name,),
+        ).fetchall()
+        if len(rows) < 2:
+            return None
+        # rows[0] = newest (after), rows[1] = second newest (before)
+        after = _json_to_profile(rows[0]["profile_json"])
+        before = _json_to_profile(rows[1]["profile_json"])
+        return before, after
     finally:
         conn.close()

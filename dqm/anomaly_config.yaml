@@ -1,0 +1,25 @@
+# Anomaly detector threshold configuration
+# All values can be overridden by placing a custom copy at ~/.dqm/anomaly_config.yaml
+# or by passing a config_path to AnomalyDetector.
+
+thresholds:
+  # Rule: null_pct increased by more than this many percentage-points → ALERT
+  null_pct_increase_pp: 10.0   # 10 pp
+
+  # Rule: unique_count dropped by more than this fraction → WARN
+  unique_count_drop_pct: 0.20  # 20 %
+
+  # Rule: row_count decreased at all → ALERT  (threshold: any decrease)
+  row_count_decrease: true
+
+  # Rule: row_count increased by more than this multiple → WARN  (500 % = 5× original)
+  row_count_increase_pct: 5.00  # 500 %
+
+  # Rule: max_val decreased for a column marked monotonically increasing → ALERT
+  # List the column names that are expected to be monotonically increasing.
+  monotonic_columns: []
+
+# Severity labels (do not change unless you know what you are doing)
+severity:
+  alert: "ALERT"
+  warn: "WARN"

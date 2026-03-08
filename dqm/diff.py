@@ -20,8 +20,6 @@ cheaper than missed regressions.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from .models import ColumnDiff, ColumnProfile, TableDiff, TableProfile
 
 # Severity thresholds (percentage-point change in null %)
@@ -122,6 +120,8 @@ class DiffEngine:
             min_after=after.min_val,
             max_before=before.max_val,
             max_after=after.max_val,
+            row_count_before=before.row_count,
+            row_count_after=after.row_count,
             top_values_before=list(before.top_values),
             top_values_after=list(after.top_values),
             severity=sev,
